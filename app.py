@@ -386,19 +386,29 @@ def montar_tabela_html(tabela: pd.DataFrame, coluna_chave: str = 'ponto', rotulo
 
 
 def _carregar_fonte(tamanho: int, negrito: bool = False) -> ImageFont.FreeTypeFont:
+    import os
+    windir = os.environ.get("WINDIR", "C:\\Windows")
     candidatos_zh = (
-        ["msyhbd.ttc", "simhei.ttf", "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+        [f"{windir}\\Fonts\\msyhbd.ttc", f"{windir}\\Fonts\\simhei.ttf", "msyhbd.ttc", "simhei.ttf",
+         "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
          "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+         "/System/Library/Fonts/Supplemental/Songti.ttc",
          "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"]
         if negrito else
-        ["msyh.ttc", "simsun.ttc", "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        [f"{windir}\\Fonts\\msyh.ttc", f"{windir}\\Fonts\\simsun.ttc", "msyh.ttc", "simsun.ttc",
+         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
          "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+         "/System/Library/Fonts/Supplemental/Songti.ttc",
          "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"]
     )
     candidatos_latin = (
-        ["arialbd.ttf", "Arial Bold.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"]
+        [f"{windir}\\Fonts\\arialbd.ttf", "arialbd.ttf", "Arial Bold.ttf",
+         "/Library/Fonts/Arial Bold.ttf", "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"]
         if negrito else
-        ["arial.ttf", "Arial.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"]
+        [f"{windir}\\Fonts\\arial.ttf", "arial.ttf", "Arial.ttf",
+         "/Library/Fonts/Arial.ttf", "/System/Library/Fonts/Supplemental/Arial.ttf",
+         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"]
     )
     # Em zh, tenta fontes com glifos CJK primeiro (Arial não desenha caracteres chineses)
     candidatos = candidatos_zh + candidatos_latin if globals().get("lang") == "zh" else candidatos_latin + candidatos_zh
@@ -407,7 +417,13 @@ def _carregar_fonte(tamanho: int, negrito: bool = False) -> ImageFont.FreeTypeFo
             return ImageFont.truetype(nome, tamanho)
         except Exception:
             continue
-    return ImageFont.load_default()
+    # Última tentativa: fonte padrão do PIL, mas escalável (Pillow >= 10.1) em vez da
+    # bitmap minúscula de tamanho fixo — assim, mesmo no pior caso, o texto não fica
+    # desproporcional ao resto do desenho.
+    try:
+        return ImageFont.load_default(size=tamanho)
+    except TypeError:
+        return ImageFont.load_default()
 
 
 def _cor_pill_rgb(valor: float):

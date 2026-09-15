@@ -285,6 +285,21 @@ def estilo_barra(fig, altura=340, y_titulo=""):
     return fig
 
 
+def estilo_barra_contagem(fig, altura=340, y_titulo=""):
+    """Estilo pra gráfico de barra empilhada com CONTAGEM (não %) — sem range fixo 0-108,
+    com legenda no topo e barras por hora."""
+    fig.update_layout(
+        font=FONTE_GRAFICO,
+        plot_bgcolor="white", paper_bgcolor="white",
+        yaxis=dict(title=y_titulo, gridcolor="#EEF2EF", zeroline=False),
+        xaxis=dict(title="", showgrid=False),
+        height=altura, margin=dict(t=40, b=20, l=10, r=10),
+        barmode="stack", bargap=0.25,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    return fig
+
+
 def estilo_donut(fig, total_label: str, altura=320):
     fig.update_traces(textposition="inside", textinfo="percent", hovertemplate="%{label}: %{value}<extra></extra>")
     fig.update_layout(
@@ -766,6 +781,118 @@ if backlog > 0:
         ))
 
 # ============================================================
+# Baixas por Hora (entregas confirmadas ao longo do dia)
+# ============================================================
+st.markdown(f"#### {L('Baixas por Hora', '每小时签收量')}")
+
+modo_baixa = st.radio(
+    L("Tipo de análise", "分析类型"),
+    options=["mesmo_dia", "todas"],
+    format_func=lambda v: L("Somente baixas no dia do vencimento", "仅显示当日到期且当日签收")
+        if v == "mesmo_dia" else L("Todas as baixas (qualquer dia)", "全部签收（不限日期）"),
+    horizontal=True,
+    key="modo_baixa_hora",
+)
+
+df_entregues_todas = df[df['classe'].isin(['No prazo', 'Fora do prazo'])].copy()
+# Só conta baixa que aconteceu no MESMO dia do vencimento do pacote — exclui entregas
+# que "vazaram" pra antes ou depois do dia de referência, pra não misturar dias.
+df_entregues_mesmo_dia = df_entregues_todas[
+    df_entregues_todas['signature_dt'].dt.date == df_entregues_todas['deadline'].dt.date
+].copy()
+qtd_fora_do_dia = len(df_entregues_todas) - len(df_entregues_mesmo_dia)
+
+df_entregues = df_entregues_mesmo_dia if modo_baixa == "mesmo_dia" else df_entregues_todas
+
+if not df_entregues.empty:
+    df_entregues['hora'] = df_entregues['signature_dt'].dt.hour
+    g_hora = df_entregues.groupby(['hora', 'classe']).size().unstack(fill_value=0)
+    for c in ['No prazo', 'Fora do prazo']:
+        if c not in g_hora.columns:
+            g_hora[c] = 0
+    g_hora = g_hora.reindex(range(24), fill_value=0).reset_index()
+    g_hora['hora_label'] = g_hora['hora'].apply(lambda h: f"{h:02d}h")
+    g_hora['total_hora'] = g_hora['No prazo'] + g_hora['Fora do prazo']
+
+    fig_hora = go.Figure()
+    fig_hora.add_bar(x=g_hora['hora_label'], y=g_hora['No prazo'],
+                      name=L('No Prazo', '准时件'), marker_color=VERDE)
+    fig_hora.add_bar(x=g_hora['hora_label'], y=g_hora['Fora do prazo'],
+                      name=L('Fora do Prazo', '超时件'), marker_color=VERMELHO)
+    # Só 1 rótulo por barra: o total empilhado, acima de cada coluna (não um rótulo
+    # por segmento, que ficaria poluído com duas séries empilhadas).
+    fig_hora.add_trace(go.Scatter(
+        x=g_hora['hora_label'], y=g_hora['total_hora'],
+        mode='text',
+        text=g_hora['total_hora'].apply(lambda v: f"{int(v):,}".replace(",", ".") if v > 0 else ""),
+        textposition='top center', textfont=dict(size=11, color=CINZA_TEXTO),
+        showlegend=False, hoverinfo='skip',
+    ))
+    estilo_barra_contagem(fig_hora, altura=340, y_titulo=L('Baixas (qtd)', '签收量'))
+    maior_total = g_hora['total_hora'].max()
+    fig_hora.update_layout(yaxis=dict(range=[0, maior_total * 1.18 if maior_total > 0 else 1]))
+    st.plotly_chart(fig_hora, use_container_width=True)
+
+    total_baixas = int(g_hora['No prazo'].sum() + g_hora['Fora do prazo'].sum())
+    pico = g_hora.loc[g_hora['total_hora'].idxmax()]
+
+    if modo_baixa == "mesmo_dia":
+        nota_exclusao = L(
+            f" ({qtd_fora_do_dia:,} baixas de outro dia foram excluídas.)".replace(",", ".") if qtd_fora_do_dia > 0 else "",
+            f"（另有 {qtd_fora_do_dia:,} 笔非当日签收已被排除。）" if qtd_fora_do_dia > 0 else ""
+        )
+        legenda_periodo = L("no dia do vencimento", "当日到期且当日签收")
+    else:
+        nota_exclusao = ""
+        legenda_periodo = L("no período (qualquer dia)", "本期间（不限日期）")
+
+    st.caption(L(
+        f"Total de {total_baixas:,} baixas {legenda_periodo}. Horário de pico: {pico['hora_label']} "
+        f"({int(pico['total_hora']):,} baixas).".replace(",", ".") + nota_exclusao,
+        f"{legenda_periodo}共 {total_baixas:,} 笔签收。高峰时段：{pico['hora_label']}"
+        f"（{int(pico['total_hora']):,} 笔）。" + nota_exclusao
+    ))
+else:
+    st.info(L("Nenhuma entrega confirmada neste corte ainda.", "本次数据中尚无已签收订单。"))
+
+# ============================================================
+# Antecedência de Entrega (quantos dias antes do prazo o pedido foi baixado)
+# ============================================================
+st.markdown(f"#### {L('Antecedência de Entrega', '提前签收天数分布')}")
+
+no_prazo_df = df[df['classe'] == 'No prazo'].copy()
+if not no_prazo_df.empty:
+    bins_ant = [-0.001, 2, 5, 10, 15, 20, 25, 9999]
+    labels_ant = [
+        L("0-2 dias", "0-2天"), L("3-5 dias", "3-5天"), L("6-10 dias", "6-10天"),
+        L("11-15 dias", "11-15天"), L("16-20 dias", "16-20天"), L("21-25 dias", "21-25天"),
+        L("26+ dias", "26天以上"),
+    ]
+    no_prazo_df['faixa_antecedencia'] = pd.cut(no_prazo_df['diferenca_dias'], bins=bins_ant, labels=labels_ant)
+    g_ant = no_prazo_df['faixa_antecedencia'].value_counts().reindex(labels_ant).fillna(0).reset_index()
+    g_ant.columns = ['faixa', 'qtd']
+
+    fig_ant = px.bar(
+        g_ant, x='faixa', y='qtd',
+        text=g_ant['qtd'].apply(lambda v: f"{int(v):,}".replace(",", ".")),
+        color_discrete_sequence=[VERDE],
+    )
+    fig_ant.update_layout(showlegend=False)
+    estilo_barra_contagem(fig_ant, altura=340, y_titulo=L('Pedidos (qtd)', '订单数量'))
+    st.plotly_chart(fig_ant, use_container_width=True)
+
+    media_ant = no_prazo_df['diferenca_dias'].mean()
+    mediana_ant = no_prazo_df['diferenca_dias'].median()
+    st.caption(L(
+        f"Média de {media_ant:.1f} dias de antecedência (mediana: {mediana_ant:.1f} dias), "
+        f"com base nos {len(no_prazo_df):,} pedidos entregues no prazo.".replace(",", "."),
+        f"平均提前 {media_ant:.1f} 天签收（中位数：{mediana_ant:.1f} 天），"
+        f"基于 {len(no_prazo_df):,} 笔准时签收订单统计。"
+    ))
+else:
+    st.info(L("Nenhum pedido no prazo neste corte ainda.", "本次数据中暂无准时签收订单。"))
+
+# ============================================================
 # Visão por Supervisor
 # ============================================================
 if tem_supervisor:
@@ -928,6 +1055,67 @@ if pontos_drill:
             montar_tabela_html(g_entreg, coluna_chave='entregador', rotulo_coluna=L('Entregador', '配送员')),
             unsafe_allow_html=True
         )
+
+        # ============================================================
+        # Lista de pedidos individuais: Fora do Prazo e Backlog
+        # ============================================================
+        entregadores_no_recorte = sorted(g_entreg['entregador'].dropna().unique())
+        opcao_todos = L("Todos", "全部")
+        with st.expander(f"🔍 {L('Ver pedidos Fora do Prazo e Backlog', '查看超时件和积压件明细')}"):
+            entregador_foco = st.selectbox(
+                L("Focar em um entregador (opcional)", "聚焦某位配送员（可选）"),
+                [opcao_todos] + entregadores_no_recorte,
+                key="entregador_foco"
+            )
+
+            df_lista = df_drill[df_drill['entregador'].isin(entregadores_no_recorte)].copy()
+            if entregador_foco != opcao_todos:
+                df_lista = df_lista[df_lista['entregador'] == entregador_foco]
+
+            qtd_fora_lista = int((df_lista['classe'] == 'Fora do prazo').sum())
+            qtd_backlog_lista = int((df_lista['classe'] == 'Backlog').sum())
+            tab_fora, tab_backlog = st.tabs([
+                f"{L('Fora do Prazo', '超时件')} ({qtd_fora_lista})",
+                f"{L('Backlog', '积压件')} ({qtd_backlog_lista})",
+            ])
+
+            with tab_fora:
+                df_fora_lista = df_lista[df_lista['classe'] == 'Fora do prazo'].copy()
+                if df_fora_lista.empty:
+                    st.info(L("Nenhum pedido fora do prazo nesse recorte.", "该范围内没有超时订单。"))
+                else:
+                    df_fora_lista['dias_atraso'] = (-df_fora_lista['diferenca_dias']).round(2)
+                    df_fora_show = df_fora_lista[
+                        ['waybill', 'entregador', 'ponto', 'deadline', 'signature_dt', 'dias_atraso']
+                    ].sort_values('dias_atraso', ascending=False)
+                    df_fora_show.columns = [
+                        L('Waybill', '运单号'), L('Entregador', '配送员'), 'DSP',
+                        L('Prazo', '时效'), L('Assinatura', '签收时间'), L('Dias de Atraso', '超时天数')
+                    ]
+                    st.dataframe(df_fora_show, use_container_width=True, hide_index=True)
+
+            with tab_backlog:
+                df_backlog_lista = df_lista[df_lista['classe'] == 'Backlog'].copy()
+                if df_backlog_lista.empty:
+                    st.info(L("Nenhum pedido em backlog nesse recorte.", "该范围内没有积压订单。"))
+                else:
+                    agora_ref = pd.Timestamp.now()
+                    df_backlog_lista['dias_desde_vencimento'] = (
+                        (agora_ref - df_backlog_lista['deadline']).dt.total_seconds() / 86400
+                    ).round(2)
+                    df_backlog_lista['status_show'] = df_backlog_lista['status'].apply(traduzir_status)
+                    df_backlog_show = df_backlog_lista[
+                        ['waybill', 'entregador', 'ponto', 'status_show', 'deadline', 'dias_desde_vencimento']
+                    ].sort_values('dias_desde_vencimento', ascending=False)
+                    df_backlog_show.columns = [
+                        L('Waybill', '运单号'), L('Entregador', '配送员'), 'DSP', L('Status', '状态'),
+                        L('Prazo', '时效'), L('Dias desde o Vencimento', '距到期天数')
+                    ]
+                    st.dataframe(df_backlog_show, use_container_width=True, hide_index=True)
+                    st.caption(L(
+                        "Valor negativo em 'Dias desde o Vencimento' = o prazo ainda não venceu.",
+                        "「距到期天数」为负数表示时效尚未到期。"
+                    ))
 
         if len(g_entreg) > 1:
             pior = g_entreg.iloc[-1]

@@ -421,12 +421,13 @@ def _cor_pill_rgb(valor: float):
 
 def _desenhar_tabela_imagem(draw: ImageDraw.ImageDraw, x: int, y: int, largura: int,
                              tabela: pd.DataFrame, coluna_chave: str, rotulo_coluna: str,
-                             fonte, fonte_bold) -> int:
+                             fonte, fonte_bold, escala: int = 1) -> int:
     verde_sidebar_rgb = (11, 61, 46)
     branco = (255, 255, 255)
     cinza_texto = (31, 41, 55)
     linha_par = (242, 247, 244)
-    altura_linha = 36
+    altura_linha = 36 * escala
+    pad = 12 * escala
 
     colunas = [rotulo_coluna, L("Backlog", "积压件"), L("Fora do Prazo", "超时件"),
                L("No Prazo", "准时件"), L("Total Geral", "总计"), L("SLA", "SLA")]
@@ -436,7 +437,7 @@ def _desenhar_tabela_imagem(draw: ImageDraw.ImageDraw, x: int, y: int, largura: 
     draw.rectangle([x, y, x + largura, y + altura_linha], fill=verde_sidebar_rgb)
     cx = x
     for c, w in zip(colunas, larguras):
-        draw.text((cx + 12, y + 10), c, font=fonte_bold, fill=branco)
+        draw.text((cx + pad, y + 10 * escala), c, font=fonte_bold, fill=branco)
         cx += w
     y += altura_linha
 
@@ -453,14 +454,14 @@ def _desenhar_tabela_imagem(draw: ImageDraw.ImageDraw, x: int, y: int, largura: 
             f"{int(r['total']):,}".replace(",", "."),
         ]
         for v, w in zip(valores, larguras[:5]):
-            draw.text((cx + 12, y + 10), v, font=fonte, fill=cinza_texto)
+            draw.text((cx + pad, y + 10 * escala), v, font=fonte, fill=cinza_texto)
             cx += w
         bg_pill, cor_pill = _cor_pill_rgb(r['pct_concluido'])
         texto_pct = f"{r['pct_concluido']:.2f}%"
-        pill_w, pill_h = 72, 24
-        px0, py0 = cx + 8, y + (altura_linha - pill_h) // 2
-        draw.rounded_rectangle([px0, py0, px0 + pill_w, py0 + pill_h], radius=12, fill=bg_pill)
-        draw.text((px0 + 10, py0 + 4), texto_pct, font=fonte, fill=cor_pill)
+        pill_w, pill_h = 72 * escala, 24 * escala
+        px0, py0 = cx + 8 * escala, y + (altura_linha - pill_h) // 2
+        draw.rounded_rectangle([px0, py0, px0 + pill_w, py0 + pill_h], radius=12 * escala, fill=bg_pill)
+        draw.text((px0 + 10 * escala, py0 + 4 * escala), texto_pct, font=fonte, fill=cor_pill)
         y += altura_linha
 
     tot_backlog = int(tabela['Backlog'].sum())
@@ -473,47 +474,59 @@ def _desenhar_tabela_imagem(draw: ImageDraw.ImageDraw, x: int, y: int, largura: 
     valores_tot = [L("Total Geral", "总计"), f"{tot_backlog:,}".replace(",", "."), f"{tot_fora:,}".replace(",", "."),
                    f"{tot_no:,}".replace(",", "."), f"{tot_geral:,}".replace(",", ".")]
     for v, w in zip(valores_tot, larguras[:5]):
-        draw.text((cx + 12, y + 10), v, font=fonte_bold, fill=branco)
+        draw.text((cx + pad, y + 10 * escala), v, font=fonte_bold, fill=branco)
         cx += w
-    pill_w, pill_h = 72, 24
-    px0, py0 = cx + 8, y + (altura_linha - pill_h) // 2
-    draw.rounded_rectangle([px0, py0, px0 + pill_w, py0 + pill_h], radius=12, fill=(255, 255, 255))
-    draw.text((px0 + 10, py0 + 4), f"{tot_sla:.2f}%", font=fonte, fill=verde_sidebar_rgb)
+    pill_w, pill_h = 72 * escala, 24 * escala
+    px0, py0 = cx + 8 * escala, y + (altura_linha - pill_h) // 2
+    draw.rounded_rectangle([px0, py0, px0 + pill_w, py0 + pill_h], radius=12 * escala, fill=(255, 255, 255))
+    draw.text((px0 + 10 * escala, py0 + 4 * escala), f"{tot_sla:.2f}%", font=fonte, fill=verde_sidebar_rgb)
     y += altura_linha
     return y
 
 
 def gerar_imagem_relatorio(g_sup_img, g_ponto_img, tem_sup: bool, agora_label: str) -> bytes:
-    largura = 1200
-    fonte_titulo = _carregar_fonte(20, negrito=True)
-    fonte_sub = _carregar_fonte(13)
-    fonte = _carregar_fonte(14)
-    fonte_bold = _carregar_fonte(14, negrito=True)
+    # Renderiza em 2x e reduz no final (supersampling) — deixa o texto nítido e
+    # anti-aliasado em vez de serrilhado, principalmente perceptível em telas de alta densidade.
+    ESCALA = 2
+    largura = 1200 * ESCALA
+    fonte_titulo = _carregar_fonte(20 * ESCALA, negrito=True)
+    fonte_sub = _carregar_fonte(13 * ESCALA)
+    fonte = _carregar_fonte(14 * ESCALA)
+    fonte_bold = _carregar_fonte(14 * ESCALA, negrito=True)
 
     linhas_sup = (len(g_sup_img) + 2) if tem_sup else 0
     linhas_dsp = len(g_ponto_img) + 2
-    altura_total = 70 + (40 + linhas_sup * 36 + 30 if tem_sup else 0) + 40 + linhas_dsp * 36 + 30
+    altura_total = (70 + (40 + linhas_sup * 36 + 30 if tem_sup else 0) + 40 + linhas_dsp * 36 + 30) * ESCALA
 
     img = Image.new("RGB", (largura, altura_total), (247, 249, 246))
     draw = ImageDraw.Draw(img)
 
-    y = 20
-    draw.text((20, y), L("Indicador de SLA Operacional — Anjun Express", "SLA运营指标 — Anjun Express"),
+    y = 20 * ESCALA
+    # "-" simples em vez de travessão "—": mais compatível entre fontes/sistemas,
+    # evita o glifo "tofu" (quadrado) quando a fonte carregada não tem esse caractere.
+    draw.text((20 * ESCALA, y), L("Indicador de SLA Operacional - Anjun Express", "SLA运营指标 - Anjun Express"),
                font=fonte_titulo, fill=(11, 61, 46))
-    y += 26
-    draw.text((20, y), L(f"Gerado a partir do arquivo processado em: {agora_label}",
+    y += 26 * ESCALA
+    draw.text((20 * ESCALA, y), L(f"Gerado a partir do arquivo processado em: {agora_label}",
                           f"数据处理时间：{agora_label}"), font=fonte_sub, fill=(107, 114, 128))
-    y += 34
+    y += 34 * ESCALA
 
     if tem_sup:
-        draw.text((20, y), L("Por Supervisor", "按主管"), font=fonte_bold, fill=(31, 41, 55))
-        y += 26
-        y = _desenhar_tabela_imagem(draw, 20, y, largura - 40, g_sup_img, 'supervisor', L("Supervisor", "主管"), fonte, fonte_bold)
-        y += 30
+        draw.text((20 * ESCALA, y), L("Por Supervisor", "按主管"), font=fonte_bold, fill=(31, 41, 55))
+        y += 26 * ESCALA
+        y = _desenhar_tabela_imagem(draw, 20 * ESCALA, y, largura - 40 * ESCALA, g_sup_img, 'supervisor',
+                                     L("Supervisor", "主管"), fonte, fonte_bold, escala=ESCALA)
+        y += 30 * ESCALA
 
-    draw.text((20, y), L("Todos os DSPs", "全部DSP网点"), font=fonte_bold, fill=(31, 41, 55))
-    y += 26
-    y = _desenhar_tabela_imagem(draw, 20, y, largura - 40, g_ponto_img, 'ponto', "DSP", fonte, fonte_bold)
+    draw.text((20 * ESCALA, y), L("Todos os DSPs", "全部DSP网点"), font=fonte_bold, fill=(31, 41, 55))
+    y += 26 * ESCALA
+    y = _desenhar_tabela_imagem(draw, 20 * ESCALA, y, largura - 40 * ESCALA, g_ponto_img, 'ponto', "DSP",
+                                 fonte, fonte_bold, escala=ESCALA)
+
+    # Reduz de volta pro tamanho final com LANCZOS (reamostragem de alta qualidade) —
+    # é isso que faz o supersampling funcionar: desenhar grande e encolher com suavização
+    # produz anti-aliasing melhor do que desenhar direto no tamanho final.
+    img = img.resize((largura // ESCALA, altura_total // ESCALA), Image.LANCZOS)
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")

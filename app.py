@@ -999,6 +999,49 @@ tabela = tabela.sort_values('pct_concluido', ascending=False)
 
 st.markdown(montar_tabela_html(tabela), unsafe_allow_html=True)
 
+# ============================================================
+# Exportar tabela filtrada (Excel / CSV)
+# ============================================================
+_cols_export = ['ponto', 'estado_dest']
+if 'supervisor' in tabela.columns:
+    _cols_export.append('supervisor')
+_cols_export += ['Backlog', 'Fora do prazo', 'No prazo', 'total', 'pct_concluido']
+
+_export_df = tabela[_cols_export].copy()
+_export_df['pct_concluido'] = _export_df['pct_concluido'].round(2)
+_rename_export = {
+    'ponto': 'DSP', 'estado_dest': L('Estado', '州'), 'supervisor': L('Supervisor', '主管'),
+    'Backlog': L('Backlog', '积压件'), 'Fora do prazo': L('Fora do Prazo', '超时件'),
+    'No prazo': L('No Prazo', '准时件'), 'total': L('Total Geral', '总计'),
+    'pct_concluido': L('% Concluído no Prazo', '准时完成率(%)'),
+}
+_export_df = _export_df.rename(columns=_rename_export)
+
+col_exp1, col_exp2 = st.columns(2)
+with col_exp1:
+    # sep=';' + utf-8-sig: formato que o Excel em português abre direto, sem
+    # bagunçar acento nem juntar tudo numa coluna só (mesmo problema que já vimos
+    # ao carregar o mapa Ponto->Supervisor).
+    _csv_bytes = _export_df.to_csv(index=False, sep=';').encode('utf-8-sig')
+    st.download_button(
+        L("⬇️ Baixar tabela filtrada (CSV)", "⬇️ 下载筛选表格 (CSV)"),
+        data=_csv_bytes,
+        file_name=f"dsp_filtrado_{agora.strftime('%Y%m%d_%H%M')}.csv",
+        mime="text/csv",
+        use_container_width=True,
+    )
+with col_exp2:
+    _buf_xlsx = io.BytesIO()
+    with pd.ExcelWriter(_buf_xlsx, engine='openpyxl') as _writer:
+        _export_df.to_excel(_writer, index=False, sheet_name='DSP')
+    st.download_button(
+        L("⬇️ Baixar tabela filtrada (Excel)", "⬇️ 下载筛选表格 (Excel)"),
+        data=_buf_xlsx.getvalue(),
+        file_name=f"dsp_filtrado_{agora.strftime('%Y%m%d_%H%M')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
+    )
+
 st.caption(L(
     "Cor da pílula SLA (pelo próprio valor de % Concluído no Prazo): verde ≥ 92% · "
     "amarelo 80–91,99% · vermelho < 80%. Ajustável, avise se quiser outro corte. "

@@ -86,6 +86,15 @@ st.markdown(f"""
         height: 8px; width: 8px; background-color: {VERDE}; border-radius: 50%;
         display: inline-block; margin-right: 6px;
     }}
+    .sb-search {{
+        background-color: rgba(255,255,255,0.07);
+        border: 1px solid #1D5340;
+        border-radius: 8px;
+        padding: 9px 12px;
+        font-size: 13px;
+        color: #7FA592;
+        margin-bottom: 16px;
+    }}
 
     /* ---- Painel de topo (header claro) ---- */
     .header-panel {{
@@ -123,19 +132,20 @@ st.markdown(f"""
     .kpi-value {{ font-size: 28px; font-weight: 800; color: {CINZA_TEXTO}; margin-top: 2px; line-height: 1.1; }}
 
     /* ---- Tabela estilo DSP ---- */
-    .dps-table {{ width: 100%; border-collapse: collapse; font-size: 13.5px;
+    .dps-table {{ width: 100%; border-collapse: collapse; font-size: 15.5px;
                   border-radius: 10px; overflow: hidden; }}
     .dps-table thead tr {{ background-color: {VERDE_SIDEBAR}; }}
     .dps-table thead th {{
-        color: white; text-align: left; padding: 10px 14px; font-weight: 600;
+        color: white; text-align: left; padding: 12px 16px; font-weight: 600;
     }}
     .dps-table tbody tr:nth-child(even) {{ background-color: #F2F7F4; }}
     .dps-table tbody tr:nth-child(odd) {{ background-color: white; }}
-    .dps-table tbody td {{ padding: 9px 14px; color: {CINZA_TEXTO}; }}
+    .dps-table tbody td {{ padding: 11px 16px; color: {CINZA_TEXTO}; }}
     .dps-table tfoot tr {{ background-color: {VERDE_SIDEBAR}; font-weight: 700; }}
-    .dps-table tfoot td {{ padding: 11px 14px; color: white; }}
+    .dps-table tfoot td {{ padding: 13px 16px; color: white; }}
     .sla-pill {{
-        display: inline-block; padding: 3px 12px; border-radius: 20px; font-weight: 700;
+        display: inline-block; padding: 4px 14px; border-radius: 20px; font-weight: 700;
+        font-size: 15px;
     }}
 
     .alert-card {{

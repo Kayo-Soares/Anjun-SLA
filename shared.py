@@ -487,6 +487,14 @@ def montar_tabela_cidade_html(tabela: pd.DataFrame, mostrar_entregadores: bool =
     """
 
 
+def exportar_excel_bytes(df: pd.DataFrame, nome_aba: str = "Dados") -> bytes:
+    """Serializa um DataFrame pra bytes de .xlsx, prontos pro st.download_button."""
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name=nome_aba[:31])  # Excel limita aba a 31 caracteres
+    return buf.getvalue()
+
+
 def _carregar_fonte(tamanho: int, negrito: bool = False) -> ImageFont.FreeTypeFont:
     import os
     windir = os.environ.get("WINDIR", "C:\\Windows")
@@ -603,10 +611,14 @@ def _desenhar_tabela_imagem(draw: ImageDraw.ImageDraw, x: int, y: int, largura: 
 
 
 def gerar_imagem_relatorio(g_sup_img, g_ponto_img, tem_sup: bool, agora_label: str) -> bytes:
-    # Renderiza em 2x e reduz no final (supersampling) — deixa o texto nítido e
-    # anti-aliasado em vez de serrilhado, principalmente perceptível em telas de alta densidade.
+    # LARGURA_FINAL é o tamanho de VERDADE da imagem exportada (o que sai no PNG).
+    # ESCALA é só suavização (supersampling): desenha maior e reduz com LANCZOS pra
+    # antialiasing, mas se reduzisse de volta pro tamanho antigo (1200px) a imagem
+    # final continuava com pouca definição pra impressão em papel — por isso
+    # aumentamos a LARGURA_FINAL (era 1200, agora 1800) e mantemos a suavização.
+    LARGURA_FINAL = 1800
     ESCALA = 2
-    largura = 1200 * ESCALA
+    largura = LARGURA_FINAL * ESCALA
     fonte_titulo = _carregar_fonte(20 * ESCALA, negrito=True)
     fonte_sub = _carregar_fonte(13 * ESCALA)
     fonte = _carregar_fonte(14 * ESCALA)
@@ -641,9 +653,9 @@ def gerar_imagem_relatorio(g_sup_img, g_ponto_img, tem_sup: bool, agora_label: s
     y = _desenhar_tabela_imagem(draw, 20 * ESCALA, y, largura - 40 * ESCALA, g_ponto_img, 'ponto', "DSP",
                                  fonte, fonte_bold, escala=ESCALA)
 
-    # Reduz de volta pro tamanho final com LANCZOS (reamostragem de alta qualidade) —
-    # é isso que faz o supersampling funcionar: desenhar grande e encolher com suavização
-    # produz anti-aliasing melhor do que desenhar direto no tamanho final.
+    # Reduz do canvas em alta resolução pro tamanho FINAL (LARGURA_FINAL, não o
+    # tamanho antigo) — LANCZOS suaviza o texto, e o resultado ainda fica bem
+    # maior/mais nítido do que a versão anterior.
     img = img.resize((largura // ESCALA, altura_total // ESCALA), Image.LANCZOS)
 
     buf = io.BytesIO()

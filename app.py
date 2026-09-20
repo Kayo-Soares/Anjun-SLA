@@ -107,9 +107,10 @@ st.session_state["agora"] = agora
 # NAVEGAÇÃO — o seletor de páginas (equivalente ao antigo botão "SLA" fixo,
 # agora com uma segunda opção real: "Análise por Cidade")
 # ============================================================
-pagina_sla = st.Page("pages/sla.py", title="SLA", icon="🕐", default=True)
+pagina_resumo = st.Page("pages/resumo.py", title="Resumo Geral / 总体概览", icon="🏠", default=True)
+pagina_sla = st.Page("pages/sla.py", title="SLA", icon="🕐")
 pagina_cidade = st.Page("pages/cidade.py", title="Análise por Cidade / 按城市分析", icon="📍")
 pagina_cliente = st.Page("pages/cliente.py", title="SLA por Cliente / 客户SLA", icon="👤")
 
-pg = st.navigation([pagina_sla, pagina_cidade, pagina_cliente])
+pg = st.navigation([pagina_resumo, pagina_sla, pagina_cidade, pagina_cliente])
 pg.run()

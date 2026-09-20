@@ -8,6 +8,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import io
 from shared import *
 
 df = st.session_state["df"]
@@ -583,7 +584,31 @@ else:
                             L('Waybill', '运单号'), L('Entregador', '配送员'), 'DSP',
                             L('Prazo', '时效'), L('Assinatura', '签收时间'), L('Dias de Atraso', '超时天数')
                         ]
-                        st.dataframe(df_fora_show, use_container_width=True, hide_index=True)
+                        col_atraso = L('Dias de Atraso', '超时天数')
+
+                        def _cor_atraso(row, _col=col_atraso):
+                            dias = row[_col]
+                            if dias >= 5:
+                                return [f'background-color: {VERMELHO_PILL_BG}'] * len(row)
+                            elif dias >= 2:
+                                return [f'background-color: {LARANJA_PILL_BG}'] * len(row)
+                            return [''] * len(row)
+
+                        st.dataframe(
+                            df_fora_show.style.apply(_cor_atraso, axis=1),
+                            use_container_width=True, hide_index=True
+                        )
+                        st.caption(L(
+                            "Linhas em vermelho: 5+ dias de atraso. Laranja: 2-4 dias.",
+                            "红色行：超时5天及以上。橙色行：超时2-4天。"
+                        ))
+                        st.download_button(
+                            L("⬇️ Baixar Fora do Prazo (Excel)", "⬇️ 下载超时件列表 (Excel)"),
+                            data=exportar_excel_bytes(df_fora_show, "Fora do Prazo"),
+                            file_name=f"fora_do_prazo_{agora.strftime('%Y%m%d_%H%M')}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key="download_fora_prazo",
+                        )
 
                 with tab_backlog:
                     df_backlog_lista = df_lista[df_lista['classe'] == 'Backlog'].copy()
@@ -602,11 +627,32 @@ else:
                             L('Waybill', '运单号'), L('Entregador', '配送员'), 'DSP', L('Status', '状态'),
                             L('Prazo', '时效'), L('Dias desde o Vencimento', '距到期天数')
                         ]
-                        st.dataframe(df_backlog_show, use_container_width=True, hide_index=True)
+                        col_venc = L('Dias desde o Vencimento', '距到期天数')
+
+                        def _cor_vencimento(row, _col=col_venc):
+                            dias = row[_col]
+                            if dias > 0:
+                                return [f'background-color: {VERMELHO_PILL_BG}'] * len(row)
+                            elif dias >= -1:
+                                return [f'background-color: {LARANJA_PILL_BG}'] * len(row)
+                            return [''] * len(row)
+
+                        st.dataframe(
+                            df_backlog_show.style.apply(_cor_vencimento, axis=1),
+                            use_container_width=True, hide_index=True
+                        )
                         st.caption(L(
-                            "Valor negativo em 'Dias desde o Vencimento' = o prazo ainda não venceu.",
-                            "「距到期天数」为负数表示时效尚未到期。"
+                            "Valor negativo em 'Dias desde o Vencimento' = o prazo ainda não venceu. "
+                            "Vermelho: já venceu e não foi entregue. Laranja: vence nas próximas 24h.",
+                            "「距到期天数」为负数表示时效尚未到期。红色：已超时但尚未签收。橙色：将在24小时内到期。"
                         ))
+                        st.download_button(
+                            L("⬇️ Baixar Backlog (Excel)", "⬇️ 下载积压件列表 (Excel)"),
+                            data=exportar_excel_bytes(df_backlog_show, "Backlog"),
+                            file_name=f"backlog_{agora.strftime('%Y%m%d_%H%M')}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key="download_backlog",
+                        )
 
             if len(g_entreg) > 1:
                 pior = g_entreg.iloc[-1]

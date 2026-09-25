@@ -11,6 +11,7 @@ import streamlit as st
 import pandas as pd
 from shared import (
     aplicar_estilo_global, L, processar_base, processar_mapa_supervisor,
+    extrair_datetime_do_nome, logo_anjun_base64,
 )
 
 st.set_page_config(
@@ -22,19 +23,72 @@ st.set_page_config(
 aplicar_estilo_global()
 
 # ============================================================
+# NAVEGAÇÃO — position="hidden" desliga o menu automático que o Streamlit
+# sempre desenha fixo no TOPO da sidebar (isso é uma trava do widget nativo:
+# não tem como reposicioná-lo por CSS nem por ordem de código). Pra Logo e
+# Idioma ficarem ACIMA do menu, a saída é essa: esconder o menu nativo e
+# desenhar nossos próprios links com st.page_link — aí sim controlamos a
+# ordem exata (Logo > Idioma > Menu > Toggle > Dados).
+# ============================================================
+pagina_resumo = st.Page("pages/resumo.py", title="Resumo Geral / 总体概览", icon="🏠", default=True)
+pagina_sla = st.Page("pages/sla.py", title="SLA", icon="🕐")
+pagina_cidade = st.Page("pages/cidade.py", title="Análise por Cidade / 按城市分析", icon="📍")
+pagina_cliente = st.Page("pages/cliente.py", title="SLA por Cliente / 客户SLA", icon="👤")
+
+pg = st.navigation([pagina_resumo, pagina_sla, pagina_cidade, pagina_cliente], position="hidden")
+
+# ============================================================
 # SIDEBAR — comum às duas páginas
 # ============================================================
 with st.sidebar:
-    _lang_escolha = st.selectbox("🌐 Idioma / 语言", ["Português", "中文"], key="lang_sel")
-    st.session_state["lang"] = "zh" if _lang_escolha == "中文" else "pt"
-
-    st.markdown('<div class="sb-logo">Anjun <span>Express</span></div>', unsafe_allow_html=True)
+    # Identidade primeiro (logo + tagline), depois idioma como configuração —
+    # marca antes de controle.
+    _logo_data_uri = logo_anjun_base64()
+    if _logo_data_uri:
+        st.markdown(
+            f'<div class="sb-logo-card"><img src="{_logo_data_uri}" alt="Anjun Express"></div>',
+            unsafe_allow_html=True
+        )
+    else:
+        # Fallback pro texto de sempre — se assets/anjun_logo.png não foi copiado
+        # pro projeto (ex: alguém pegou só o app.py sem a pasta assets/), a sidebar
+        # não quebra, só volta a mostrar o wordmark em texto.
+        st.markdown('<div class="sb-logo">Anjun <span>Express</span></div>', unsafe_allow_html=True)
     st.markdown(
         f'<div class="sb-tagline">{L("Mais eficiência para a sua entrega.", "为您的配送提供更高效率。")}</div>',
         unsafe_allow_html=True
     )
 
+    _lang_escolha = st.selectbox("🌐 Idioma / 语言", ["Português", "中文"], key="lang_sel")
+    st.session_state["lang"] = "zh" if _lang_escolha == "中文" else "pt"
+
+    st.markdown("<div style='margin-top:4px;'></div>", unsafe_allow_html=True)
+    # Menu — desenhado à mão com st.page_link (o nativo está com
+    # position="hidden" lá em cima) pra poder ficar embaixo de Logo/Idioma.
+    st.page_link(pagina_resumo, label=L("Resumo Geral", "总体概览"), icon="🏠")
+    st.page_link(pagina_sla, label="SLA", icon="🕐")
+    st.page_link(pagina_cidade, label=L("Análise por Cidade", "按城市分析"), icon="📍")
+    st.page_link(pagina_cliente, label=L("SLA por Cliente", "客户SLA"), icon="👤")
+
+    # Toggle Dashboard / SLA Detalhado — só faz sentido dentro da página SLA,
+    # por isso só aparece quando ela é a página ativa. Fica depois de
+    # logo/idioma e antes dos dados.
+    if pg is pagina_sla:
+        st.markdown("<div style='margin-top:6px;'></div>", unsafe_allow_html=True)
+        st.radio(
+            L("Navegação", "导航"),
+            options=["dashboard", "sla"],
+            format_func=lambda v: L("📊 Dashboard", "📊 仪表盘") if v == "dashboard"
+                else L("📋 SLA Detalhado", "📋 SLA 详情"),
+            key="pagina_nav_sla",
+            label_visibility="collapsed",
+        )
+
     st.markdown("---")
+    st.markdown(
+        f'<div class="sb-section-label">{L("Dados", "数据")}</div>',
+        unsafe_allow_html=True
+    )
     uploaded_file = st.file_uploader(
         L("📤 Enviar base bruta (.xlsx)", "📤 上传原始数据 (.xlsx)"),
         type=["xlsx"],
@@ -81,7 +135,9 @@ try:
     if st.session_state.get("file_id") != file_id:
         st.session_state["file_id"] = file_id
         st.session_state["agora_fixo"] = pd.Timestamp.now()
+        st.session_state["extracao_fixo"] = extrair_datetime_do_nome(uploaded_file.name)
     agora = st.session_state["agora_fixo"]
+    extracao_dt = st.session_state.get("extracao_fixo")
 
     df = processar_base(uploaded_file)
     tem_entregador = 'entregador' in df.columns
@@ -102,15 +158,6 @@ st.session_state["tem_entregador"] = tem_entregador
 st.session_state["tem_supervisor"] = tem_supervisor
 st.session_state["mapa_supervisor"] = mapa_supervisor
 st.session_state["agora"] = agora
+st.session_state["extracao"] = extracao_dt
 
-# ============================================================
-# NAVEGAÇÃO — o seletor de páginas (equivalente ao antigo botão "SLA" fixo,
-# agora com uma segunda opção real: "Análise por Cidade")
-# ============================================================
-pagina_resumo = st.Page("pages/resumo.py", title="Resumo Geral / 总体概览", icon="🏠", default=True)
-pagina_sla = st.Page("pages/sla.py", title="SLA", icon="🕐")
-pagina_cidade = st.Page("pages/cidade.py", title="Análise por Cidade / 按城市分析", icon="📍")
-pagina_cliente = st.Page("pages/cliente.py", title="SLA por Cliente / 客户SLA", icon="👤")
-
-pg = st.navigation([pagina_resumo, pagina_sla, pagina_cidade, pagina_cliente])
 pg.run()

@@ -87,8 +87,10 @@ st.write("")
 # Baixar como imagem (PNG) — mesmo formato de print da aba SLA, já reflete
 # o filtro de supervisor se algum estiver selecionado.
 # ============================================================
+extracao_dt = st.session_state.get("extracao")
 imagem_resumo = gerar_imagem_relatorio(
-    None, g_ponto_resumo, False, agora.strftime('%d/%m/%Y %H:%M')
+    None, g_ponto_resumo, False, agora.strftime('%d/%m/%Y %H:%M'),
+    extracao_dt.strftime('%d/%m/%Y %H:%M:%S') if extracao_dt is not None else None,
 )
 st.download_button(
     L("⬇️ Baixar como imagem (PNG)", "⬇️ 下载为图片 (PNG)"),

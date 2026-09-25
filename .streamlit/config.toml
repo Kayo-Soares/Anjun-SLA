@@ -1,0 +1,12 @@
+# Tema fixo do app — impede que o Streamlit siga o modo claro/escuro do
+# navegador ou do sistema operacional de quem está vendo. Sem isso, tabelas
+# nativas (st.dataframe) e outros widgets do Streamlit mudam de aparência
+# (fundo preto, texto claro, etc.) dependendo da preferência de cada pessoa,
+# o que quebra a identidade visual da Anjun Express.
+[theme]
+base = "light"
+primaryColor = "#00A63E"
+backgroundColor = "#F4F8F6"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#1F2937"
+font = "sans serif"
